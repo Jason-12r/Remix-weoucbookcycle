@@ -12,6 +12,24 @@ import { AnimatePresence, motion } from 'motion/react';
 import { User, BookItem, ChatSession, ChatMessage } from './data/mockData';
 import { api } from './services/api';
 
+// Simple notification sound (beep)
+const playNotificationSound = () => {
+  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+
+  oscillator.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+
+  oscillator.type = 'sine';
+  oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
+  gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+  gainNode.gain.exponentialRampToValueAtTime(0.00001, audioContext.currentTime + 0.5);
+
+  oscillator.start();
+  oscillator.stop(audioContext.currentTime + 0.5);
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
@@ -51,6 +69,52 @@ export default function App() {
       }
     };
     fetchData();
+
+    // Polling for new messages (simple implementation)
+    const interval = setInterval(async () => {
+      try {
+        const data = await api.init();
+        
+        setMessages(prev => {
+          let hasNew = false;
+          const newMessages = data.messages;
+          
+          Object.keys(newMessages).forEach(chatId => {
+            const oldLen = prev[chatId]?.length || 0;
+            const newLen = newMessages[chatId]?.length || 0;
+            
+            if (newLen > oldLen) {
+              const lastMsg = newMessages[chatId][newLen - 1];
+              if (lastMsg.senderId !== 'me') {
+                hasNew = true;
+              }
+            }
+          });
+
+          if (hasNew) {
+            playNotificationSound();
+          }
+          
+          // Only update state if there are changes to avoid unnecessary re-renders
+          if (JSON.stringify(prev) !== JSON.stringify(newMessages)) {
+             return newMessages;
+          }
+          return prev;
+        });
+
+        setChats(prev => {
+           if (JSON.stringify(prev) !== JSON.stringify(data.chats)) {
+             return data.chats;
+           }
+           return prev;
+        });
+
+      } catch (error) {
+        console.error("Polling error:", error);
+      }
+    }, 5000); // Poll every 5 seconds
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleBookClick = (id: string) => {
