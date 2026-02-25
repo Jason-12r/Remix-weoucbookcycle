@@ -5,9 +5,10 @@ import { books, users, BookItem, User } from '../data/mockData';
 interface PostProps {
   onBack: () => void;
   user?: User;
+  onPostBook: (book: BookItem) => void;
 }
 
-export const Post: React.FC<PostProps> = ({ onBack, user: propUser }) => {
+export const Post: React.FC<PostProps> = ({ onBack, user: propUser, onPostBook }) => {
   const user = propUser || users['me'];
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
@@ -98,11 +99,9 @@ export const Post: React.FC<PostProps> = ({ onBack, user: propUser }) => {
       images: images.length > 0 ? images : ['https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=800&h=1200&fit=crop'],
     };
 
-    books.unshift(newBook);
-    users['me'].listings.push(newBook.id);
+    onPostBook(newBook);
     
     alert('Book published successfully!');
-    onBack();
   };
 
   return (

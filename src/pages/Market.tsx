@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { Search, Filter, ChevronDown, X } from 'lucide-react';
-import { books } from '../data/mockData';
+import { BookItem } from '../data/mockData';
 import { BookCard } from '../components/BookCard';
 
 interface MarketProps {
   onBookClick: (id: string) => void;
   wishlist?: string[];
   onToggleWishlist?: (id: string) => void;
+  books: BookItem[];
 }
 
-export const Market: React.FC<MarketProps> = ({ onBookClick, wishlist = [], onToggleWishlist }) => {
+export const Market: React.FC<MarketProps> = ({ onBookClick, wishlist = [], onToggleWishlist, books }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);

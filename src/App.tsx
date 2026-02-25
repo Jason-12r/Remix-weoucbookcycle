@@ -9,24 +9,48 @@ import { BookDetail } from './pages/BookDetail';
 import { ChatDetail } from './pages/ChatDetail';
 import { UsageInstructionsModal } from './components/UsageInstructionsModal';
 import { AnimatePresence, motion } from 'motion/react';
-import { users as initialUsers, chats as initialChats, messages as initialMessages, books as initialBooks, ChatMessage } from './data/mockData';
+import { User, BookItem, ChatSession, ChatMessage } from './data/mockData';
+import { api } from './services/api';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [viewingUserId, setViewingUserId] = useState<string | null>(null);
-  const [wishlist, setWishlist] = useState<string[]>(initialUsers['me'].wishlist);
-  const [chats, setChats] = useState(initialChats);
-  const [messages, setMessages] = useState(initialMessages);
-  const [users, setUsers] = useState(initialUsers);
-  const [books, setBooks] = useState(initialBooks);
+  
+  // Initialize with empty/loading state
+  const [wishlist, setWishlist] = useState<string[]>([]);
+  const [chats, setChats] = useState<ChatSession[]>([]);
+  const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({});
+  const [users, setUsers] = useState<Record<string, User>>({});
+  const [books, setBooks] = useState<BookItem[]>([]);
+  
   const [evaluatedBookIds, setEvaluatedBookIds] = useState<string[]>([]);
   const [showInstructions, setShowInstructions] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     // Show instructions on first load
     setShowInstructions(true);
+
+    // Fetch initial data
+    const fetchData = async () => {
+      try {
+        const data = await api.init();
+        setUsers(data.users);
+        setBooks(data.books);
+        setChats(data.chats);
+        setMessages(data.messages);
+        if (data.users['me']) {
+          setWishlist(data.users['me'].wishlist);
+        }
+      } catch (error) {
+        console.error("Failed to fetch initial data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
   }, []);
 
   const handleBookClick = (id: string) => {
@@ -41,7 +65,8 @@ export default function App() {
     setViewingUserId(sellerId);
   };
 
-  const handleToggleWishlist = (bookId: string) => {
+  const handleToggleWishlist = async (bookId: string) => {
+    // Optimistic update
     setWishlist(prev => {
       if (prev.includes(bookId)) {
         return prev.filter(id => id !== bookId);
@@ -49,41 +74,47 @@ export default function App() {
         return [...prev, bookId];
       }
     });
-  };
-
-  const handleStartChat = (sellerId: string) => {
-    if (sellerId === 'me') return;
-
-    // Find existing chat
-    const existingChat = chats.find(c => c.participants.includes(sellerId) && c.participants.includes('me'));
     
-    if (existingChat) {
-      setSelectedChatId(existingChat.id);
-      setSelectedBookId(null);
-      setViewingUserId(null);
-      setActiveTab('messages');
-    } else {
-      // Create a new mock chat session
-      const newChatId = `c${Date.now()}`;
-      const newChat = {
-        id: newChatId,
-        participants: ['me', sellerId],
-        lastMessage: '',
-        lastMessageTime: 'Now',
-        unreadCount: 0
-      };
-      setChats(prev => [...prev, newChat]);
-      setMessages(prev => ({ ...prev, [newChatId]: [] }));
-      setSelectedChatId(newChatId);
-      setSelectedBookId(null);
-      setViewingUserId(null);
-      setActiveTab('messages');
+    try {
+      await api.toggleWishlist(bookId);
+    } catch (error) {
+      console.error("Failed to toggle wishlist:", error);
+      // Revert if needed (omitted for brevity)
     }
   };
 
-  const handleSendMessage = (chatId: string, text: string) => {
+  const handleStartChat = async (sellerId: string) => {
+    if (sellerId === 'me') return;
+
+    try {
+      const chat = await api.startChat(sellerId);
+      
+      // Update local state if it's a new chat
+      setChats(prev => {
+        if (!prev.find(c => c.id === chat.id)) {
+          return [...prev, chat];
+        }
+        return prev;
+      });
+      
+      if (!messages[chat.id]) {
+        setMessages(prev => ({ ...prev, [chat.id]: [] }));
+      }
+
+      setSelectedChatId(chat.id);
+      setSelectedBookId(null);
+      setViewingUserId(null);
+      setActiveTab('messages');
+    } catch (error) {
+      console.error("Failed to start chat:", error);
+    }
+  };
+
+  const handleSendMessage = async (chatId: string, text: string) => {
+    // Optimistic update
+    const tempId = `temp-${Date.now()}`;
     const newMessage: ChatMessage = {
-      id: `m${Date.now()}`,
+      id: tempId,
       senderId: 'me',
       text: text,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -99,32 +130,37 @@ export default function App() {
         ? { ...chat, lastMessage: text, lastMessageTime: 'Now' }
         : chat
     ));
+
+    try {
+      const savedMessage = await api.sendMessage(chatId, text, 'me');
+      // Replace temp message with real one
+      setMessages(prev => ({
+        ...prev,
+        [chatId]: prev[chatId].map(m => m.id === tempId ? savedMessage : m)
+      }));
+    } catch (error) {
+      console.error("Failed to send message:", error);
+    }
   };
 
-  const handleEvaluate = (sellerId: string, bookId: string, isGood: boolean) => {
+  const handleEvaluate = async (sellerId: string, bookId: string, isGood: boolean) => {
     setEvaluatedBookIds(prev => [...prev, bookId]);
     
-    setUsers(prevUsers => {
-      const seller = prevUsers[sellerId];
-      if (!seller) return prevUsers;
-
-      const newRating = isGood ? seller.rating + 1 : seller.rating - 1;
-      const newTrustScore = isGood ? seller.trustScore : Math.max(0, seller.trustScore - 10);
+    try {
+      const updatedSeller = await api.evaluateUser(sellerId, isGood);
       
-      const updatedSeller = { 
-        ...seller, 
-        rating: newRating,
-        trustScore: newTrustScore 
-      };
+      setUsers(prevUsers => ({
+        ...prevUsers,
+        [sellerId]: updatedSeller
+      }));
 
-      // If trust score drops to 60 or below, remove their listings
-      if (newTrustScore <= 60) {
+      // If trust score dropped, update books locally
+      if (updatedSeller.trustScore <= 60) {
         setBooks(prevBooks => prevBooks.filter(book => book.sellerId !== sellerId));
-        updatedSeller.listings = [];
       }
-
-      return { ...prevUsers, [sellerId]: updatedSeller };
-    });
+    } catch (error) {
+      console.error("Failed to evaluate user:", error);
+    }
   };
 
   const handleBack = () => {
@@ -148,6 +184,31 @@ export default function App() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-slate-950 text-white">
+        Loading...
+      </div>
+    );
+  }
+
+  const handlePostBook = async (book: BookItem) => {
+    try {
+      const newBook = await api.postBook(book);
+      setBooks(prev => [newBook, ...prev]);
+      setUsers(prev => ({
+        ...prev,
+        [newBook.sellerId]: {
+          ...prev[newBook.sellerId],
+          listings: [...prev[newBook.sellerId].listings, newBook.id]
+        }
+      }));
+      setActiveTab('home');
+    } catch (error) {
+      console.error("Failed to post book:", error);
+    }
+  };
+
   const renderContent = () => {
     if (selectedChatId) {
       const chat = chats.find(c => c.id === selectedChatId);
@@ -164,6 +225,8 @@ export default function App() {
             setViewingUserId(sellerId);
             setSelectedChatId(null);
           }}
+          books={books}
+          users={users}
         />
       );
     }
@@ -221,7 +284,7 @@ export default function App() {
           />
         );
       case 'post':
-        return <Post onBack={() => setActiveTab('home')} user={users['me']} />;
+        return <Post onBack={() => setActiveTab('home')} user={users['me']} onPostBook={handlePostBook} />;
       case 'messages':
         return (
           <Messages 

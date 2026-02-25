@@ -8,7 +8,7 @@ import {
   ShoppingBag,
   X
 } from 'lucide-react';
-import { books, users, ChatMessage, ChatSession } from '../data/mockData';
+import { BookItem, User, ChatMessage, ChatSession } from '../data/mockData';
 
 interface ChatDetailProps {
   id: string;
@@ -17,9 +17,11 @@ interface ChatDetailProps {
   onSendMessage: (text: string) => void;
   chat: ChatSession;
   onSellerClick: (sellerId: string) => void;
+  books: BookItem[];
+  users: Record<string, User>;
 }
 
-export const ChatDetail: React.FC<ChatDetailProps> = ({ id, onBack, messages, onSendMessage, chat, onSellerClick }) => {
+export const ChatDetail: React.FC<ChatDetailProps> = ({ id, onBack, messages, onSendMessage, chat, onSellerClick, books, users }) => {
   const [inputText, setInputText] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Search, Bell, ScanLine, Grid, List, ChevronRight, Book, GraduationCap, Coffee, Sparkles, QrCode } from 'lucide-react';
-import { books } from '../data/mockData';
+import { BookItem } from '../data/mockData';
 import { BookCard } from '../components/BookCard';
 
 interface HomeProps {
@@ -8,9 +8,10 @@ interface HomeProps {
   wishlist?: string[];
   onToggleWishlist?: (id: string) => void;
   onShowInstructions?: () => void;
+  books: BookItem[];
 }
 
-export const Home: React.FC<HomeProps> = ({ onBookClick, wishlist = [], onToggleWishlist, onShowInstructions }) => {
+export const Home: React.FC<HomeProps> = ({ onBookClick, wishlist = [], onToggleWishlist, onShowInstructions, books }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
